@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bds-postgres
+    environment:
+      POSTGRES_USER: spark
+      POSTGRES_PASSWORD: spark
+      POSTGRES_DB: bigdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spark -d bigdata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: bds-clickhouse
+    environment:
+      CLICKHOUSE_DB: reports
+      CLICKHOUSE_USER: spark
+      CLICKHOUSE_PASSWORD: spark
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./clickhouse-init:/docker-entrypoint-initdb.d:ro
+      - ch_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user spark --password spark --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  spark:
+    image: apache/spark:3.5.3
+    container_name: bds-spark
+    user: root
+    entrypoint: ["/bin/bash", "-c", "sleep infinity"]
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./исходные данные:/data/csv:ro
+      - ivy_cache:/root/.ivy2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  ch_data:
+  ivy_cache:
